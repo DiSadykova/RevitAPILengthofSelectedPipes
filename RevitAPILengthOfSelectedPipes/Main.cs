@@ -1,5 +1,6 @@
 ﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Plumbing;
 using Autodesk.Revit.UI;
 using System;
 using System.Collections.Generic;
@@ -18,43 +19,40 @@ namespace RevitAPILengthOfSelectedPipes
             UIDocument uidoc = uiapp.ActiveUIDocument;
             Document doc = uidoc.Document;
 
-            ElementCategoryFilter pipesCategoryFilter = new ElementCategoryFilter(BuiltInCategory.OST_PipeCurves);
-            ElementClassFilter pipesInstancesFilter = new ElementClassFilter(typeof(FamilyInstance));
-
-            LogicalAndFilter pipesFilter = new LogicalAndFilter(pipesCategoryFilter, pipesInstancesFilter);
-
             var pipes = new FilteredElementCollector(doc)
-                .WherePasses(pipesFilter)
-                .Cast<FamilyInstance>()
+                .OfClass(typeof(Pipe))
+                .Cast<Pipe>()
                 .ToList();
-            foreach (var pipe in pipes)
-            {
-                if (pipe is FamilyInstance)
-                {
-                    using (Transaction ts = new Transaction(doc, "Set parameters"))
-                    {
-                        ts.Start();
-                        var familyInstance = pipe as FamilyInstance;
-                        Parameter commentParameter = familyInstance.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS);
-                        commentParameter.Set("Труба");
-                        ts.Commit();
-                    }
-                }
-            }
+
+
             IList<Reference> selectedElementRefList = null;
-            selectedElementRefList = uidoc.Selection.PickObjects(Autodesk.Revit.UI.Selection.ObjectType.Element, new PipeFilter(), "Выберите элементы");
+            try
+            {
+                selectedElementRefList = uidoc.Selection.PickObjects(Autodesk.Revit.UI.Selection.ObjectType.Element, new PipeFilter(), "Выберите элементы");
+            }
+            catch(Autodesk.Revit.Exceptions.OperationCanceledException)
+            { }
+            if (selectedElementRefList == null)
+            {
+                return Result.Cancelled;
+            }
 
             var elementList = new List<Element>();
+            double pipeLength = 0;
+            double Sum = 0;
             foreach (var selectedElement in selectedElementRefList)
             {
-                Element element = doc.GetElement(selectedElement);
-                double pipeLength = !!!!!!!!
-                elementList.Add(element);
+                Pipe oPipe = doc.GetElement(selectedElement) as Pipe;
+                Parameter lengthParameter = oPipe.get_Parameter(BuiltInParameter.CURVE_ELEM_LENGTH);
+                if (lengthParameter.StorageType == StorageType.Double)
+                {
+                    pipeLength = UnitUtils.ConvertFromInternalUnits(lengthParameter.AsDouble(), UnitTypeId.Meters);
+                }
+                Sum += pipeLength;
+
             }
+            TaskDialog.Show("Сумма длин выбранных труб", Sum.ToString());
 
-
-
-            TaskDialog.Show("Сообщение", "Тест");
             return Result.Succeeded;
 
         }
